@@ -1,11 +1,13 @@
 import json
 import calendar
+from functools import partial
 
 from urllib2 import urlopen
 from datetime import datetime, date, timedelta
 from BeautifulSoup import BeautifulSoup
 from dateutil.parser import parse
 from icalendar import Calendar
+import requests
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -28,6 +30,7 @@ class Command(BaseCommand):
                        opengarage,
                        whitespace,
                        voidwarranties,
+                       #partial(json_api, 'http://localhost:9000/test.json')
                       ]:
             with transaction.commit_on_success():
                 source()
@@ -300,3 +303,28 @@ def voidwarranties():
         )
 
         print "adding %s [%s] (%s)..." % (title.encode("Utf-8"), "voidwarranties", "")
+
+
+def json_api(url):
+    """Generic function to add events from an urls respecting the json api,
+    add to source with
+           partial(json_api, your_url)
+    """
+    reponse = requests.get(url)
+    j = reponse.json()
+
+    # clean events
+    Event.objects.filter(source=j['org']).delete()
+
+    for event in j['events']:
+        Event.objects.create(
+            title=event['title'],
+            source=j['org'],
+            url=event['url'],
+            start=parse(event['start']),
+            end=parse(event['end']) if event.has_key('end') else None,
+            all_day=event['all_day'] if event.has_key('all_day') else None,
+            location=event['location'] if event.has_key('location') else None,
+        )
+
+        print "adding %s [%s] (%s)..." % (event['title'].encode("Utf-8"), j['org'], event.get('location', '').encode("Utf-8"))
